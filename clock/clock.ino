@@ -1,5 +1,5 @@
-#define DEBUG_PRINT
-#define DEBUG_VARS
+//#define DEBUG_PRINT
+//#define DEBUG_VARS
 //#define DEBUG_SCREEN
 
 #ifdef DEBUG_PRINT
@@ -8,26 +8,8 @@
 #define DEBUG_PRINT(...)
 #endif
 
-// #include <LiquidCrystal_I2C.h>
-// LiquidCrystal_I2C lcd(0x27,16,4);
-
-#include <LiquidCrystal.h>               // includes the LiquidCrystal Library
-#define LCD_COLONS 16
-#define LCD_ROWS 4
-LiquidCrystal lcd(6, A1, 9, 10, 11, 12);  // Creates an LCD object. Parameters: (rs, enable, d4, d5, d6, d7)
-
-#include <LibPrintf.h>
-
 #include <Wire.h>
-
-#include <PCF85063A-SOLDERED.h>
-PCF85063A rtc;
-
-#include <BMP180I2C.h>
-#define TEMP_SENSOR_ADDRESS 0x77
-BMP180I2C bmp180(TEMP_SENSOR_ADDRESS);
-
-// #include <LiquidCrystal.h>
+#include <LibPrintf.h>
 
 #define USE_TIMER_1 true
 #define USE_TIMER_2 false
@@ -36,27 +18,17 @@ BMP180I2C bmp180(TEMP_SENSOR_ADDRESS);
 #include <ISR_Timer.h>
 #include <ISR_Timer.hpp>
 
-#include <Adafruit_NeoPixel.h>
-Adafruit_NeoPixel pixels(1, 8, NEO_GRB + NEO_KHZ800);
+// I2C LCD
+// #include <LiquidCrystal_I2C.h>
+// LiquidCrystal_I2C lcd(0x27,16,4);
 
-char tempToRGB[16][3] = {
-    {0, 0, 255},     // 15°C - Blue
-    {0, 51, 255},    // 16°C
-    {0, 102, 255},   // 17°C
-    {0, 153, 255},   // 18°C
-    {0, 204, 255},   // 19°C
-    {0, 255, 255},   // 20°C
-    {0, 255, 204},   // 21°C
-    {0, 255, 153},   // 22°C
-    {0, 255, 75},     // 23°C - Green
-    {0, 255, 0},   // 24°C - Perfect Temperature (Green)
-    {75, 255, 0},     // 25°C - Green
-    {128, 255, 0},   // 26°C
-    {204, 255, 0},   // 27°C - Yellow
-    {255, 128, 0},   // 28°C
-    {255, 88, 0},     // 29°C
-    {255, 44, 0}      // 30°C - Red
-};
+#include <LiquidCrystal.h>  // includes the LiquidCrystal Library
+#define LCD_COLONS 16
+#define LCD_ROWS 4
+#include <PCF85063A-SOLDERED.h>
+#include <BMP180I2C.h>
+#define TEMP_SENSOR_ADDRESS 0x77
+#include <Adafruit_NeoPixel.h>
 
 typedef struct Time {
   uint8_t second;
@@ -102,18 +74,23 @@ typedef struct Ringer {
   char remainingRings;
 } Ringer;
 
+
 //Global Variables
-//Ringer r = { active, currentOutput, lastOutput, uptime, downtime, startTime, remainingRings};
-Ringer r = { false, 0, false, 500, 1000, 0, 0};
-Display d = { "", "", "", "" };
-bool displayStatus = true;
-Time t = { 88, 88, 88, 88, 88, 8888, 0, "" };
-//Sensor s = { -52, 1125, false, 0, false, 0 };
-Sensor s;
 
 volatile bool getTimeFlag = true;
 volatile bool printScreenFlag = true;
 volatile bool getSensorFlag = true;
+
+const int PIN_LCD_BACKLIGHT = A2;
+const int PIN_RINGER = A3;
+const int BUTTON0 = 7;
+const int BUTTON1 = 5;
+const int BUTTON2 = 4;
+const int BUTTON3 = 3;
+const int BUTTON4 = 2;
+const long LONG_PRESS_TIME = 2000;
+const uint8_t cursorPositions[7][2] = { { 3, 11 }, { 3, 8 }, { 3, 5 }, { 2, 6 }, { 2, 9 }, { 2, 14 }, { 2, 1 } };
+const uint8_t daysInMonth[12] = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
 int setupMode = 0;
 int setupCursor = 0;
@@ -126,23 +103,43 @@ int setupCursor = 0;
 5 - Year
 6 - Weekday
 */
-const uint8_t cursorPositions[7][2] = { { 3, 11 }, { 3, 8 }, { 3, 5 }, { 2, 6 }, { 2, 9 }, { 2, 14 }, { 2, 1 } };
-const uint8_t daysInMonth[12] = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
-const int PIN_LCD_BACKLIGHT = A2;
-const int PIN_RINGER = A3;
-const int BUTTON0 = 7;
-const int BUTTON1 = 5;
-const int BUTTON2 = 4;
-const int BUTTON3 = 3;
-const int BUTTON4 = 2;
-const long LONG_PRESS_TIME = 2000;
+PCF85063A rtc;
+BMP180I2C bmp180(TEMP_SENSOR_ADDRESS);
+Adafruit_NeoPixel rgbLED(1, 8, NEO_GRB + NEO_KHZ800);
+LiquidCrystal lcd(6, A1, 9, 10, 11, 12);  // Creates an LCD object. Parameters: (rs, enable, d4, d5, d6, d7)
+//Ringer r = { active, currentOutput, lastOutput, uptime, downtime, startTime, remainingRings};
+Ringer r = { false, 0, false, 500, 1000, 0, 0 };
+Display d = { "", "", "", "" };
+bool displayStatus = true;
+Time t = { 88, 88, 88, 88, 88, 8888, 0, "" };
+//Sensor s = { -52, 1125, false, 0, false, 0 };
+Sensor s;
 
 Button button0 = { BUTTON0, 0, 0, 0 };
 Button button1_setup = { BUTTON1, 0, 0, 0 };
 Button button2_select = { BUTTON2, 0, 0, 0 };
 Button button3_minus = { BUTTON3, 0, 0, 0 };
 Button button4_plus = { BUTTON4, 0, 0, 0 };
+
+const unsigned char tempToRGB[16][3] = {
+  { 0, 0, 255 },    // 15°C - Blue
+  { 0, 51, 255 },   // 16°C
+  { 0, 102, 255 },  // 17°C
+  { 0, 153, 255 },  // 18°C
+  { 0, 204, 255 },  // 19°C
+  { 0, 255, 255 },  // 20°C
+  { 0, 255, 204 },  // 21°C
+  { 0, 255, 153 },  // 22°C
+  { 0, 255, 75 },   // 23°C
+  { 0, 255, 0 },    // 24°C - Green
+  { 75, 255, 0 },   // 25°C
+  { 128, 255, 0 },  // 26°C
+  { 204, 255, 0 },  // 27°C
+  { 255, 128, 0 },  // 28°C
+  { 255, 88, 0 },   // 29°C
+  { 255, 44, 0 }    // 30°C - Red
+};
 
 //Functions
 
@@ -184,11 +181,11 @@ void getTime() {
   t.second = rtc.getSecond();
 }
 
-void setPixel (int temperature) {
+void setRGB(int temperature) {
   if (temperature <= 15) temperature = 15;
-  if (temperature >  30) temperature = 30;
-  pixels.setPixelColor(0, pixels.Color(tempToRGB[temperature-15][0],tempToRGB[temperature-15][1],tempToRGB[temperature-15][2]));
-  pixels.show();
+  if (temperature > 30) temperature = 30;
+  rgbLED.setPixelColor(0, rgbLED.Color(tempToRGB[temperature - 15][0], tempToRGB[temperature - 15][1], tempToRGB[temperature - 15][2]));
+  rgbLED.show();
 }
 
 void getSensor() {
@@ -202,7 +199,7 @@ void getSensor() {
   if (s.tempStarted && bmp180.hasValue()) {
     s.temperature = bmp180.getTemperature();
     s.tempStarted = false;
-    setPixel(s.temperature);
+    setRGB(s.temperature);
 
     // Start a pressure measurement
     bmp180.measurePressure();
@@ -276,7 +273,7 @@ void printScreen() {
   DEBUG_PRINT("Button4: %d\n", digitalRead(BUTTON4));
   DEBUG_PRINT("Temp: %d\n", s.temperature);
   DEBUG_PRINT("Pres: %f\n", s.pressure);
-  DEBUG_PRINT("R:%d, G:%d, B:%d\n", tempToRGB[s.temperature][0],tempToRGB[s.temperature][1],tempToRGB[s.temperature][2]);
+  DEBUG_PRINT("R:%d, G:%d, B:%d\n", tempToRGB[s.temperature][0], tempToRGB[s.temperature][1], tempToRGB[s.temperature][2]);
   DEBUG_PRINT("Ring Active:    %b\n", r.active);
   DEBUG_PRINT("Ring Current:   %b\n", r.currentOutput);
   DEBUG_PRINT("Ring Last:      %b\n", r.lastOutput);
@@ -299,17 +296,17 @@ void printScreen() {
     lcd.print(d.line2);
     lcd.setCursor(0, 3);
     lcd.print(d.line3);
-    
+
     lcd.setCursor(cursorPositions[setupCursor][1], cursorPositions[setupCursor][0]);
     lcd.blink();
 
-    #ifdef DEBUG_SCREEN
+#ifdef DEBUG_SCREEN
     DEBUG_PRINT("------------------\n");
     DEBUG_PRINT("|%s|\n", d.line0);
     DEBUG_PRINT("|                |\n");
     DEBUG_PRINT("|%s|\n", d.line2);
     DEBUG_PRINT("|%s|\n", d.line3);
-    #endif
+#endif
   } else
   // Clock Screen
   {
@@ -326,13 +323,13 @@ void printScreen() {
     lcd.setCursor(0, 3);
     lcd.print(d.line3);
 
-    #ifdef DEBUG_SCREEN
+#ifdef DEBUG_SCREEN
     DEBUG_PRINT("------------------\n");
     DEBUG_PRINT("|%s|\n", d.line0);
     DEBUG_PRINT("|                |\n");
     DEBUG_PRINT("|%s|\n", d.line2);
     DEBUG_PRINT("|%s|\n", d.line3);
-    #endif
+#endif
   }
 }
 
@@ -348,7 +345,7 @@ void increaseDigit() {
       if (++t.hour > 23) t.hour = 0;
       break;
     case 3:
-      if (++t.day > daysInMonth[t.month-1]) t.day = 1;
+      if (++t.day > daysInMonth[t.month - 1]) t.day = 1;
       break;
     case 4:
       if (++t.month > 12) t.month = 1;
@@ -377,7 +374,7 @@ void decreaseDigit() {
       if (--t.hour == 255) t.hour = 23;
       break;
     case 3:
-      if (--t.day == 0) t.day = daysInMonth[t.month-1];
+      if (--t.day == 0) t.day = daysInMonth[t.month - 1];
       break;
     case 4:
       if (--t.month == 1) t.month = 12;
@@ -397,7 +394,7 @@ void decreaseDigit() {
 // TODO
 void error(char errorNumber) {
   do {
-    for (char i=0; i < errorNumber; i++) {
+    for (char i = 0; i < errorNumber; i++) {
       digitalWrite(LED_BUILTIN, HIGH);
       delay(50);
       digitalWrite(LED_BUILTIN, LOW);
@@ -407,13 +404,12 @@ void error(char errorNumber) {
   } while (true);
 }
 
-bool toggleDisplay(){
+bool toggleDisplay() {
   if (displayStatus == true) {
-      lcd.noDisplay();
-      analogWrite(A2, 0);
-      displayStatus = false;
-  }
-  else {
+    lcd.noDisplay();
+    analogWrite(A2, 0);
+    displayStatus = false;
+  } else {
     lcd.display();
     analogWrite(A2, 255);
     displayStatus = true;
@@ -422,7 +418,7 @@ bool toggleDisplay(){
 
 void updateRinger() {
   //Ring start
-  if (r.currentOutput == 0  && !r.lastOutput ) {
+  if (r.currentOutput == 0 && !r.lastOutput) {
     analogWrite(PIN_RINGER, 255);
     r.currentOutput = true;
     r.lastOutput = true;
@@ -438,7 +434,7 @@ void updateRinger() {
     return;
   }
   //Ringer silence period
-  if (!r.currentOutput && r.lastOutput ) {
+  if (!r.currentOutput && r.lastOutput) {
     if ((millis() - r.startTime - r.uptime) > r.downtime) {
       analogWrite(PIN_RINGER, 0);
       r.lastOutput = false;
@@ -451,46 +447,55 @@ void updateRinger() {
 }
 
 void startRinger(uint8_t rings) {
-    r.remainingRings = rings; //t.hour % 12;
-    r.active = true;
+  r.remainingRings = rings;  //t.hour % 12;
+  r.active = true;
 }
 
 void intro() {
-    sprintf(d.line0, "  \"Bell Clock\"  ");
-    lcd.setCursor(0, 1);
-    lcd.print(d.line0);
-    sprintf(d.line0, "     by Luka    ");
-    lcd.setCursor(0, 2);
-    lcd.print(d.line0);
-    for (int j=0; j<2; j++) {
-      for (int i=7; i>=0; i--) {
-        lcd.setCursor(i, 0);
-        lcd.print("+");
-        lcd.setCursor(15-i, 0);
-        lcd.print("+");
+  sprintf(d.line0, "  \"Bell Clock\"  ");
+  lcd.setCursor(0, 1);
+  lcd.print(d.line0);
+  sprintf(d.line0, "     by Luka    ");
+  lcd.setCursor(0, 2);
+  lcd.print(d.line0);
+  for (int j = 0; j < 2; j++) {
+    //Poll sensor during intro
+    getSensor();
+    for (int i = 7; i >= 0; i--) {
+      lcd.setCursor(i, 0);
+      lcd.print("+");
+      lcd.setCursor(15 - i, 0);
+      lcd.print("+");
 
-        lcd.setCursor(i, 3);
-        lcd.print("+");
-        lcd.setCursor(15-i, 3);
-        lcd.print("+");
+      lcd.setCursor(i, 3);
+      lcd.print("+");
+      lcd.setCursor(15 - i, 3);
+      lcd.print("+");
 
-        delay(250);
-      }
-      for (int i=7; i>=0; i--) {
-        lcd.setCursor(i, 0);
-        lcd.print(" ");
-        lcd.setCursor(15-i, 0);
-        lcd.print(" ");
+      rgbLED.setPixelColor(0, i * 36, 0, 252 - i * 36);
+      rgbLED.show();
 
-        lcd.setCursor(i, 3);
-        lcd.print(" ");
-        lcd.setCursor(15-i, 3);
-        lcd.print(" ");
-        delay(250);
-      }
+
+      delay(250);
     }
-    lcd.setCursor(0, 1);
-    lcd.print("                ");    
+    for (int i = 7; i >= 0; i--) {
+      lcd.setCursor(i, 0);
+      lcd.print(" ");
+      lcd.setCursor(15 - i, 0);
+      lcd.print(" ");
+
+      lcd.setCursor(i, 3);
+      lcd.print(" ");
+      lcd.setCursor(15 - i, 3);
+      lcd.print(" ");
+
+      rgbLED.setPixelColor(0, 252 - i * 36, 0, i * 36);
+      rgbLED.show();
+    }
+    delay(250);
+  }
+  lcd.setCursor(0, 1);
+  lcd.print("                ");
 }
 
 //TIMERS
@@ -512,7 +517,6 @@ void timer_1sec() {
 // Setup
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
-  //digitalWrite(LED_BUILTIN, HIGH);
   pinMode(BUTTON0, INPUT_PULLUP);
   pinMode(BUTTON1, INPUT_PULLUP);
   pinMode(BUTTON2, INPUT_PULLUP);
@@ -521,17 +525,15 @@ void setup() {
   pinMode(PIN_LCD_BACKLIGHT, OUTPUT);
   pinMode(PIN_RINGER, OUTPUT);
   pinMode(7, INPUT_PULLUP);
-  analogWrite(PIN_LCD_BACKLIGHT, 255); //Turn on Display
-  analogWrite(PIN_RINGER, 0); //Turn off Ringer
+  analogWrite(PIN_LCD_BACKLIGHT, 255);  //Turn on Display
+  analogWrite(PIN_RINGER, 0);           //Turn off Ringer
 
-  #ifdef DEBUG_PRINT
   Serial.begin(115200);
-  #endif
 
   //For I2C library .... TOBUY
   //lcd.init();
   //lcd.backlight();
-  lcd.begin(LCD_COLONS, LCD_ROWS); 
+  lcd.begin(LCD_COLONS, LCD_ROWS);
 
   rtc.begin();
   getTime();
@@ -542,7 +544,7 @@ void setup() {
 
   ITimer1.init();
   ITimer1.attachInterruptInterval(50, timerHandler);
-  ISR_timer.setInterval(1000, timerRefreshScreen);
+  ISR_timer.setInterval(500, timerRefreshScreen);
   ISR_timer.setInterval(1000, timer_1sec);
 
   // Set 24h mode on RTC
@@ -550,17 +552,15 @@ void setup() {
   Wire.write(0x0);  // Select address of Control_1 register
   Wire.write(0x0);  // Set all bits to 0
   Wire.endTransmission();
+
   //rtc.reset();
   //rtc.setTime(17, 6, 30); // 24H mode, ex. 6:54:00
   //rtc.setDate(0, 2, 6, 2024); // 0 for Sunday, ex. Saturday, 16.5.2020.
-  while (s.temperature == 0 || s.pressure == 0.0) {
-    getSensor();
-  }
 
-  pixels.begin();
-  pixels.setBrightness(32);
-  pixels.clear();
-  pixels.show();
+  rgbLED.begin();
+  rgbLED.setBrightness(32);
+  rgbLED.clear();
+  rgbLED.show();
   intro();
 }
 
@@ -596,8 +596,8 @@ void loop() {
     printScreenFlag = false;
   }
 
-  // Handle buttons
 
+  // Handle buttons
   if (setupMode) {
     // Button1 - Leave setup and update Time/Date
     if (checkButton(&button1_setup)) {
@@ -615,13 +615,14 @@ void loop() {
     if (checkButton(&button4_plus)) {
       increaseDigit();
     }
-  } else {
+  }
+
+  else {
     if (checkButton(&button1_setup)) {
       if (button1_setup.longPress == 1 && displayStatus == true) {
         setupMode = true;
-        setupCursor = 0;  //Seconds
-      }
-      else {
+        setupCursor = 0;  // seconds
+      } else {
         toggleDisplay();
       }
     }
@@ -629,7 +630,6 @@ void loop() {
     if (checkButton(&button2_select)) {
       toggleDisplay();
     }
-
     if (checkButton(&button3_minus)) {
       toggleDisplay();
     }
@@ -638,10 +638,6 @@ void loop() {
       // TODO toggle Ringer
       //toggleDisplay();
       startRinger(++r.remainingRings);
-      DEBUG_PRINT("RING!!!\n");
     }
   }
-
-  // TODO Handle BackLight Idle
-  // TODO Automatic Backlight
 }
